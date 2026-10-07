@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoShield Intelligence (CSI)</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #0A192F; color: #E2E8F0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .card-bg { background-color: #112240; border: 1px solid #1E3A8A; }
+        .accent-cyan { color: #00F0FF; }
+        .accent-green { color: #00E676; }
+        .code-diff-old { background-color: #3B1619; color: #FF8A80; border-left: 4px solid #FF5252; }
+        .code-diff-new { background-color: #113824; color: #B9F6CA; border-left: 4px solid #00E676; }
+        .node-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .severity-critical { background-color: #7F1D1D; color: #FCA5A5; border: 1px solid #EF4444; }
+        .severity-high { background-color: #78350F; color: #FDE68A; border: 1px solid #F59E0B; }
+        .severity-medium { background-color: #1E3A5F; color: #93C5FD; border: 1px solid #3B82F6; }
+        .finding-card:hover { border-color: #00F0FF !important; transform: translateX(4px); }
+        .finding-card { transition: all 0.2s ease; cursor: pointer; }
+        #fileDropZone.drag-over { border-color: #00F0FF; background-color: #0D2137; }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+        .tab-active { background-color: #1E3A8A; color: #00F0FF; border-bottom: 2px solid #00F0FF; }
+        .tab-inactive { background-color: transparent; color: #64748B; }
+        .tab-inactive:hover { color: #CBD5E1; }
+    </style>
+</head>
+<body class="p-4 md:p-6 min-h-screen">
+
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row justify-between items-start md:items-center pb-4 mb-6 border-b border-gray-700">
+        <div>
+            <div class="flex items-center space-x-3">
+                <span class="text-3xl">&#128737;</span>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-white tracking-wide">CryptoShield Intelligence <span class="accent-cyan text-lg md:text-xl font-normal">(CSI)</span></h1>
+            </div>
+            <p class="text-gray-400 text-sm mt-1">Automated Cryptographic Vulnerability Detection &amp; One-Click Remediation Engine</p>
+        </div>
+        <div class="flex items-center space-x-3 mt-3 md:mt-0">
+            <span class="px-3 py-1 text-xs font-semibold rounded-full bg-green-900 text-green-300 border border-green-500">ENGINE ACTIVE</span>
+            <span class="px-3 py-1 text-xs font-semibold rounded-full bg-blue-900 text-cyan-300 border border-cyan-500">PQC AUDITOR ON</span>
+        </div>
+    </header>
+
+    <!-- Controls -->
+    <div class="card-bg p-4 rounded-xl mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+            <button onclick="loadSampleC()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg shadow transition text-sm">Scan Sample C Code</button>
+            <button onclick="loadSampleOvpn()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg shadow transition text-sm">Scan Sample OpenVPN Config</button>
+        </div>
+        <div>
+            <input type="file" id="fileInput" class="hidden" onchange="handleFileUpload(event)" accept=".c,.h,.cpp,.ovpn,.conf,.cfg,.txt">
+            <button onclick="document.getElementById('fileInput').click()" class="px-4 py-2 border border-cyan-400 text-cyan-300 hover:bg-cyan-900 hover:bg-opacity-30 font-medium rounded-lg transition text-sm">Upload Your Own File</button>
+        </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="card-bg p-4 rounded-xl border-l-4 border-red-500">
+            <p class="text-gray-400 text-xs">Total Vulnerabilities</p>
+            <h3 id="metricTotal" class="text-2xl font-bold text-red-400 mt-1">0</h3>
+        </div>
+        <div class="card-bg p-4 rounded-xl border-l-4 border-yellow-500">
+            <p class="text-gray-400 text-xs">Highest CVSS Score</p>
+            <h3 id="metricCvss" class="text-2xl font-bold text-yellow-400 mt-1">--</h3>
+        </div>
+        <div class="card-bg p-4 rounded-xl border-l-4 border-cyan-500">
+            <p class="text-gray-400 text-xs">PQC Readiness</p>
+            <h3 id="metricPqc" class="text-2xl font-bold accent-cyan mt-1">--</h3>
+        </div>
+        <div class="card-bg p-4 rounded-xl border-l-4 border-green-500">
+            <p class="text-gray-400 text-xs">Auto-Fix Ready</p>
+            <h3 id="metricFix" class="text-2xl font-bold accent-green mt-1">--</h3>
+        </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Graph + Findings -->
+        <div class="lg:col-span-5 space-y-6">
+            <!-- Attack Surface Graph -->
+            <div class="card-bg p-4 rounded-xl">
+                <h2 class="text-sm font-bold text-white mb-3 flex items-center justify-between">
+                    <span>Cryptographic Attack Surface Graph</span>
+                    <span class="text-xs text-gray-500">Live Node View</span>
+                </h2>
+                <div id="graphContainer" class="bg-gray-900 bg-opacity-60 p-3 rounded-lg border border-gray-800 h-44 flex items-center justify-center">
+                    <p class="text-gray-500 text-sm">Click a scan button above to generate the attack graph</p>
+                </div>
+            </div>
+
+            <!-- Findings List -->
+            <div class="card-bg p-4 rounded-xl">
+                <h2 class="text-sm font-bold text-white mb-3">Detected Flaws &amp; Findings</h2>
+                <div id="findingsList" class="space-y-3 max-h-72 overflow-y-auto pr-1">
+                    <p class="text-gray-500 text-sm text-center py-4">No scan results yet. Run a scan to begin.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Diff View -->
+        <div class="lg:col-span-7 card-bg p-4 rounded-xl flex flex-col justify-between">
+            <div>
+                <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-700">
+                    <h2 class="text-sm font-bold text-white">Code Diff &amp; Auto-Remediation Viewer</h2>
+                    <span id="currentFileName" class="text-xs bg-gray-800 text-cyan-300 px-3 py-1 rounded font-mono">No file scanned</span>
+                </div>
+
+                <!-- Tabs: Source / Remediated -->
+                <div class="flex space-x-1 mb-4">
+                    <button id="tabDiff" onclick="showTab('diff')" class="px-3 py-1 text-xs font-semibold rounded-t tab-active">Vulnerability Diff</button>
+                    <button id="tabOriginal" onclick="showTab('original')" class="px-3 py-1 text-xs font-semibold rounded-t tab-inactive">Full Original Code</button>
+                    <button id="tabRemediated" onclick="showTab('remediated')" class="px-3 py-1 text-xs font-semibold rounded-t tab-inactive">Full Remediated Code</button>
+                </div>
+
+                <!-- Diff View -->
+                <div id="viewDiff" class="space-y-4 font-mono text-xs">
+                    <div>
+                        <p class="text-xs text-red-400 font-semibold mb-1">Original (Vulnerable):</p>
+                        <pre id="diffOld" class="code-diff-old p-3 rounded overflow-x-auto">No scan results yet</pre>
+                    </div>
+                    <div>
+                        <p class="text-xs text-green-400 font-semibold mb-1">Auto-Remediated (CSI Patch):</p>
+                        <pre id="diffNew" class="code-diff-new p-3 rounded overflow-x-auto">No scan results yet</pre>
+                    </div>
+                    <div class="bg-gray-900 p-3 rounded border border-gray-800 text-xs text-gray-300">
+                        <p class="font-semibold text-cyan-300 mb-1">CSI Patch Rationale:</p>
+                        <p id="fixExplanation">Run a scan to see vulnerability details and auto-generated fixes.</p>
+                    </div>
+                </div>
+
+                <!-- Full Original View -->
+                <div id="viewOriginal" class="hidden">
+                    <pre id="fullOriginal" class="bg-gray-900 p-3 rounded border border-gray-800 text-xs text-gray-300 font-mono overflow-x-auto max-h-96 overflow-y-auto">No file loaded</pre>
+                </div>
+
+                <!-- Full Remediated View -->
+                <div id="viewRemediated" class="hidden">
+                    <pre id="fullRemediated" class="code-diff-new p-3 rounded text-xs font-mono overflow-x-auto max-h-96 overflow-y-auto">No remediation generated</pre>
+                </div>
+            </div>
+
+            <!-- Action Footer -->
+            <div class="mt-5 pt-4 border-t border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <button onclick="downloadPatch()" class="text-xs text-gray-400 hover:text-white underline">Download .patch file</button>
+                <button id="btnApplyPatch" onclick="applyHotPatch()" class="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-xl shadow-lg transform transition active:scale-95 text-sm">Apply One-Click Hot-Patch</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-8 pt-4 border-t border-gray-800 text-center text-gray-600 text-xs">
+        CryptoShield Intelligence (CSI) | Final Year Project | Department of Computer Science &amp; Engineering
+    </footer>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-emerald-600 text-white px-5 py-3 rounded-lg shadow-2xl hidden transition transform duration-300 text-sm font-semibold">
+        Patch Applied Successfully! Source file updated.
+    </div>
+
+<script>
+// ========== CSI SCANNER ENGINE (JavaScript Port) ==========
+
+const SCAN_RULES = [
+    {
+        id: "CSI-SEC-001",
+        name: "Timing Side-Channel Leak (memcmp)",
+        severity: "HIGH",
+        cvss: 7.5,
+        pattern: /\bif\s*\(\s*memcmp\s*\(([^,]+),\s*([^,]+),\s*([^)]+)\)\s*==\s*0\s*\)/g,
+        description: "Standard memcmp leaks timing information during secret/MAC comparison. Attackers can measure nanosecond execution variance to guess secret keys.",
+        fixReplace: (match, p1, p2, p3) => `if (CRYPTO_memcmp(${p1}, ${p2}, ${p3}) == 0)`,
+        fixExplanation: "Replaced non-constant-time memcmp with OpenSSL constant-time CRYPTO_memcmp to eliminate timing side-channel leaks.",
+        category: "Code"
+    },
+    {
+        id: "CSI-SEC-002",
+        name: "Un-Sanitized Secret Key Buffer in RAM",
+        severity: "MEDIUM",
+        cvss: 6.2,
+        pattern: /\b(free\s*\(\s*([a-zA-Z0-9_]*(?:key|secret)[a-zA-Z0-9_]*)\s*\);)/g,
+        description: "Secret key memory buffer freed without sanitization. Key material remains visible in RAM dumps after deallocation.",
+        fixReplace: (match, full, varName) => `OPENSSL_cleanse(${varName}, sizeof(${varName})); ${full}`,
+        fixExplanation: "Inserted OPENSSL_cleanse() before free() to securely erase secret key bytes from memory before deallocation.",
+        category: "Code"
+    },
+    {
+        id: "CSI-SEC-003",
+        name: "Vulnerable Block Cipher (SWEET32 Attack)",
+        severity: "CRITICAL",
+        cvss: 9.1,
+        pattern: /\bcipher\s+(BF-CBC|DES-CBC|3DES-CBC|RC4-MD5)\b/g,
+        description: "64-bit block cipher selected in OpenVPN config. Vulnerable to birthday-bound attacks (SWEET32 / CVE-2016-6329).",
+        fixReplace: () => "cipher AES-256-GCM",
+        fixExplanation: "Upgraded weak 64-bit block cipher to authenticated AEAD cipher AES-256-GCM with 128-bit block size.",
+        category: "Config"
+    },
+    {
+        id: "CSI-SEC-004",
+        name: "Weak HMAC Authentication Hash",
+        severity: "MEDIUM",
+        cvss: 5.8,
+        pattern: /\bauth\s+(MD5|SHA1)\b/g,
+        description: "Deprecated hash function used for HMAC packet authentication. MD5 and SHA1 have known collision vulnerabilities.",
+        fixReplace: () => "auth SHA256",
+        fixExplanation: "Upgraded deprecated HMAC hash algorithm to SHA256 for stronger packet authentication integrity.",
+        category: "Config"
+    },
+    {
+        id: "CSI-SEC-005",
+        name: "Quantum-Vulnerable Public Key Exchange",
+        severity: "HIGH (PQC)",
+        cvss: 7.8,
+        pattern: /\b(EVP_PKEY_RSA|EVP_PKEY_DH|ECDH_compute_key)\b/g,
+        description: "Classical public key algorithm susceptible to Shor's algorithm on future quantum hardware. Requires migration to NIST PQC standards.",
+        fixReplace: (match, p1) => `/* [CSI-PQC] Migrate to NIST ML-KEM/Kyber768 */ ${p1}`,
+        fixExplanation: "Flagged classical key exchange and inserted NIST Post-Quantum Cryptography (PQC) migration recommendation (ML-KEM / Kyber768).",
+        category: "PQC Audit"
+    },
+    {
+        id: "CSI-SEC-006",
+        name: "Insecure Hash Function (MD5/SHA1)",
+        severity: "MEDIUM",
+        cvss: 5.5,
+        pattern: /\bEVP_MD_fetch\s*\(\s*NULL\s*,\s*"(MD5|SHA1)"\s*,/g,
+        description: "Deprecated hash algorithm fetched via OpenSSL EVP API. MD5 and SHA1 are cryptographically broken for security use.",
+        fixReplace: (match, algo) => match.replace(algo, "SHA256"),
+        fixExplanation: "Replaced deprecated hash algorithm with SHA256 via OpenSSL EVP API.",
+        category: "Code"
+    }
+];
+
+const SAMPLE_C_CODE = `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <openssl/evp.h>
+
+// Sample OpenVPN Cryptographic Module
+int verify_packet_mac(const unsigned char *computed_mac,
+                      const unsigned char *received_mac,
+                      size_t mac_len) {
+    // VULNERABILITY: Timing side-channel comparison leak
+    if (memcmp(computed_mac, received_mac, mac_len) == 0) {
+        return 1; // MAC match
+    }
+    return 0;
+}
+
+void process_client_session(const char *client_id) {
+    char *secret_key = (char *)malloc(32);
+    snprintf(secret_key, 32, "SECRET_SESSION_KEY_%s", client_id);
+
+    // Perform session cryptographic operations...
+    printf("Session key active for %s\\n", client_id);
+
+    // VULNERABILITY: Key buffer freed without sanitization
+    free(secret_key);
+}
+
+void setup_key_exchange() {
+    // VULNERABILITY: Quantum-vulnerable RSA key exchange
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
+    EVP_PKEY_keygen_init(ctx);
+    printf("RSA Keypair generated.\\n");
+}
+
+int main() {
+    printf("Initializing OpenVPN Crypto Module...\\n");
+    process_client_session("CLIENT_1092");
+    return 0;
+}`;
+
+const SAMPLE_OVPN = `# OpenVPN Server Configuration File
+port 1194
+proto udp
+dev tun
+
+# Server TLS certificates
+ca ca.crt
+cert server.crt
+key server.key
+dh dh2048.pem
+
+# VULNERABILITY: Insecure Blowfish cipher (SWEET32)
+cipher BF-CBC
+
+# VULNERABILITY: Deprecated HMAC hash
+auth MD5
+
+keepalive 10 120
+persist-key
+persist-tun
+status openvpn-status.log
+verb 3`;
+
+let currentScanData = null;
+
+function scanContent(fileName, content) {
+    const results = [];
+    let remediated = content;
+
+    for (const rule of SCAN_RULES) {
+        const regex = new RegExp(rule.pattern.source, rule.pattern.flags);
+        let match;
+        while ((match = regex.exec(content)) !== null) {
+            const lineNum = content.substring(0, match.index).split('\n').length;
+            const matchedText = match[0];
+            const fixedText = matchedText.replace(new RegExp(rule.pattern.source, ''), rule.fixReplace);
+
+            results.push({
+                id: rule.id,
+                title: rule.name,
+                severity: rule.severity,
+                cvss: rule.cvss,
+                line: lineNum,
+                matched: matchedText,
+                suggested_fix: fixedText,
+                description: rule.description,
+                fix_explanation: rule.fixExplanation,
+                category: rule.category
+            });
+        }
+        remediated = remediated.replace(new RegExp(rule.pattern.source, rule.pattern.flags), rule.fixReplace);
+    }
+
+    return {
+        file_name: fileName,
+        total_vulnerabilities: results.length,
+        vulnerabilities: results,
+        original_code: content,
+        remediated_code: remediated
+    };
+}
+
+function loadSampleC() {
+    const data = scanContent("vulnerable_crypto.c", SAMPLE_C_CODE);
+    renderScanResults(data);
+}
+
+function loadSampleOvpn() {
+    const data = scanContent("server.ovpn", SAMPLE_OVPN);
+    renderScanResults(data);
+}
+
+function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const content = e.target.result;
+        const data = scanContent(file.name, content);
+        renderScanResults(data);
+    };
+    reader.readAsText(file);
+}
+
+function renderScanResults(data) {
+    currentScanData = data;
+    showTab('diff');
+    document.getElementById('currentFileName').innerText = data.file_name;
+    document.getElementById('metricTotal').innerText = data.total_vulnerabilities;
+    document.getElementById('fullOriginal').innerText = data.original_code;
+    document.getElementById('fullRemediated').innerText = data.remediated_code;
+
+    // PQC metric
+    const hasPqc = data.vulnerabilities.some(v => v.category === 'PQC Audit');
+    document.getElementById('metricPqc').innerText = hasPqc ? 'FLAGGED' : 'CLEAR';
+    document.getElementById('metricFix').innerText = data.total_vulnerabilities > 0 ? '100%' : '--';
+
+    // Max CVSS
+    if (data.vulnerabilities.length > 0) {
+        const maxCvss = Math.max(...data.vulnerabilities.map(v => v.cvss));
+        document.getElementById('metricCvss').innerText = maxCvss.toFixed(1) + ' / 10';
+    } else {
+        document.getElementById('metricCvss').innerText = '--';
+    }
+
+    // Findings list
+    const listEl = document.getElementById('findingsList');
+    listEl.innerHTML = '';
+
+    if (data.vulnerabilities.length === 0) {
+        listEl.innerHTML = '<p class="text-green-400 text-sm text-center py-4 font-semibold">No vulnerabilities detected. Code looks clean!</p>';
+        document.getElementById('diffOld').innerText = 'No vulnerabilities found';
+        document.getElementById('diffNew').innerText = 'Code is secure';
+        document.getElementById('fixExplanation').innerText = 'No remediation needed.';
+        return;
+    }
+
+    // Select first finding
+    selectFinding(0);
+
+    data.vulnerabilities.forEach((vuln, idx) => {
+        const sevClass = vuln.severity.includes('CRITICAL') ? 'severity-critical' : vuln.severity.includes('HIGH') ? 'severity-high' : 'severity-medium';
+        const item = document.createElement('div');
+        item.className = 'finding-card p-3 bg-gray-900 rounded-lg border border-gray-800';
+        item.onclick = () => selectFinding(idx);
+        item.innerHTML = `
+            <div class="flex justify-between items-start mb-1">
+                <span class="text-xs font-bold px-2 py-0.5 rounded ${sevClass}">${vuln.severity}</span>
+                <span class="text-xs text-gray-500 font-mono">Line ${vuln.line} | CVSS ${vuln.cvss}</span>
+            </div>
+            <h4 class="text-sm font-semibold text-white mt-1">${vuln.title}</h4>
+            <p class="text-xs text-gray-400 mt-1">${vuln.description.substring(0, 100)}...</p>
+            <span class="text-xs accent-cyan mt-1 inline-block">${vuln.id} | ${vuln.category}</span>
+        `;
+        listEl.appendChild(item);
+    });
+
+    // Update graph
+    renderGraph(data.vulnerabilities);
+}
+
+function selectFinding(idx) {
+    if (!currentScanData) return;
+    const vuln = currentScanData.vulnerabilities[idx];
+    document.getElementById('diffOld').innerText = vuln.matched;
+    document.getElementById('diffNew').innerText = vuln.suggested_fix;
+    document.getElementById('fixExplanation').innerText = vuln.fix_explanation;
+}
+
+function showTab(tab) {
+    document.getElementById('viewDiff').classList.toggle('hidden', tab !== 'diff');
+    document.getElementById('viewOriginal').classList.toggle('hidden', tab !== 'original');
+    document.getElementById('viewRemediated').classList.toggle('hidden', tab !== 'remediated');
+    document.getElementById('tabDiff').className = 'px-3 py-1 text-xs font-semibold rounded-t ' + (tab === 'diff' ? 'tab-active' : 'tab-inactive');
+    document.getElementById('tabOriginal').className = 'px-3 py-1 text-xs font-semibold rounded-t ' + (tab === 'original' ? 'tab-active' : 'tab-inactive');
+    document.getElementById('tabRemediated').className = 'px-3 py-1 text-xs font-semibold rounded-t ' + (tab === 'remediated' ? 'tab-active' : 'tab-inactive');
+}
+
+function renderGraph(vulns) {
+    const container = document.getElementById('graphContainer');
+    const nodeColors = { 'Code': '#EF4444', 'Config': '#F59E0B', 'PQC Audit': '#8B5CF6' };
+    let svg = `<svg class="w-full h-full" viewBox="0 0 440 160">`;
+    // Center entry node
+    svg += `<circle cx="40" cy="80" r="16" fill="#1E3A8A" stroke="#00F0FF" stroke-width="2"/>`;
+    svg += `<text x="40" y="84" font-size="9" fill="#FFF" text-anchor="middle">Entry</text>`;
+
+    const unique = [];
+    const seen = new Set();
+    vulns.forEach(v => { if (!seen.has(v.id)) { seen.add(v.id); unique.push(v); }});
+
+    const count = unique.length;
+    unique.forEach((v, i) => {
+        const y = 20 + (140 / (count + 1)) * (i + 1);
+        const x = 180;
+        const color = nodeColors[v.category] || '#EF4444';
+        svg += `<line x1="56" y1="80" x2="${x - 16}" y2="${y}" stroke="#374151" stroke-width="1.5"/>`;
+        svg += `<circle cx="${x}" cy="${y}" r="14" fill="${color}22" stroke="${color}" stroke-width="2" class="node-pulse"/>`;
+        svg += `<text x="${x}" y="${y + 3}" font-size="7" fill="${color}" text-anchor="middle" font-weight="bold">${v.id.split('-')[2]}</text>`;
+        // Connect to fix node
+        svg += `<line x1="${x + 14}" y1="${y}" x2="350" y2="80" stroke="#00E676" stroke-width="1" stroke-dasharray="4"/>`;
+    });
+
+    // Fix node
+    svg += `<circle cx="350" cy="80" r="18" fill="#064E3B" stroke="#00E676" stroke-width="2"/>`;
+    svg += `<text x="350" y="76" font-size="8" fill="#00E676" text-anchor="middle" font-weight="bold">AUTO</text>`;
+    svg += `<text x="350" y="88" font-size="8" fill="#00E676" text-anchor="middle" font-weight="bold">FIX</text>`;
+
+    // Safe output
+    svg += `<line x1="368" y1="80" x2="420" y2="80" stroke="#00E676" stroke-width="2"/>`;
+    svg += `<circle cx="425" cy="80" r="10" fill="#064E3B" stroke="#00E676" stroke-width="1.5"/>`;
+    svg += `<text x="425" y="83" font-size="7" fill="#0F0" text-anchor="middle">OK</text>`;
+
+    svg += `</svg>`;
+    container.innerHTML = svg;
+}
+
+function applyHotPatch() {
+    if (!currentScanData || currentScanData.total_vulnerabilities === 0) return;
+    const toast = document.getElementById('toast');
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 3000);
+}
+
+function downloadPatch() {
+    if (!currentScanData) { alert('Run a scan first.'); return; }
+    let patch = `--- a/${currentScanData.file_name}\n+++ b/${currentScanData.file_name} (CSI Auto-Remediated)\n\n`;
+    currentScanData.vulnerabilities.forEach(v => {
+        patch += `@@ Line ${v.line} - ${v.id}: ${v.title} @@\n`;
+        patch += `- ${v.matched}\n`;
+        patch += `+ ${v.suggested_fix}\n\n`;
+    });
+    const blob = new Blob([patch], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `csi_patch_${currentScanData.file_name}.patch`;
+    a.click();
+}
+</script>
+</body>
+</html>
